@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Product Configurator</title>
+
+  <!-- SheetJS for Excel export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; background: #f4f6f8; }
+    h1 { margin: 0 0 8px; }
+    .sub { color: #555; margin: 0 0 18px; }
+    .wrap { max-width: 1200px; }
+    .card { background: #fff; border-radius: 10px; padding: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 16px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    label { display:block; font-weight: 700; margin: 10px 0 6px; }
+    select { width: 100%; padding: 10px; border: 1px solid #cfd6dd; border-radius: 8px; background: #fff; }
+    button { padding: 10px 14px; border: 0; border-radius: 8px; cursor: pointer; font-weight: 700; }
+    .btnrow { display:flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    .primary { background: #1f6feb; color: #fff; }
+    .secondary { background: #eaeef2; color: #111; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; background: #fff; }
+    th, td { border: 1px solid #d8dee4; padding: 8px; }
+    th { background: #f6f8fa; text-align: left; }
+    .hint { color:#666; font-size: 12px; margin-top: 8px; }
+    .pill { display:inline-block; padding: 3px 8px; border-radius: 999px; background:#eef2ff; color:#1f2a7a; font-size: 12px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Build your product</h1>
+  <p class="sub">LOV-driven configurator with preview and Excel export.</p>
+
+  <div class="card">
+    <h2>Configure</h2>
+    <div id="formArea" class="grid"></div>
+
+    <div class="btnrow">
+      <button class="primary" type="button" onclick="preview()">Preview</button>
+      <button class="secondary" type="button" onclick="clearAll()">Clear</button>
+      <button class="primary" type="button" onclick="exportExcel()">Export to Excel</button>
+    </div>
+
+    <div class="hint">
+      Dropdowns are generated from the LOV definitions.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Preview</h2>
+    <div id="previewStatus" class="hint">Choose values and click Preview.</div>
+
+    <table id="selTable">
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Selected Value</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  /* Embedded LOV data (from your spreadsheet) */
+  const DATA = {
+    "lovs": {
+      "Model": ["Mini-ITX", "Micro-ATX", "Rackmount"],
+      "CPU": ["i3", "i5", "i7"],
+      "RAM": ["8GB", "16GB", "32GB"],
+      "SSD": ["256GB", "512GB", "1TB"],
+      "Power supply": ["110-240V", "24VDC"],
+      "Operating Temperature range": ["0-50C", "-20-70C"],
+      "IP": ["IP40", "IP65"]
+    }
+  };
+
+  function el(tag, attrs={}, children=[]) {
+    const n = document.createElement(tag);
+    for (const [k,v] of Object.entries(attrs)) {
+      if (k === "text") n.textContent = v;
+      else n.setAttribute(k, v);
+    }
+    for (const ch of children) n.appendChild(ch);
+    return n;
+  }
+
+  function buildForm() {
+    const formArea = document.getElementById("formArea");
+    formArea.innerHTML = "";
+
+    for (const [lovName, options] of Object.entries(DATA.lovs)) {
+      const id = "f_" + lovName.replace(/\W+/g, "_");
+      const label = el("label", {for: id, text: lovName});
+      const select = el("select", {id, name: lovName});
+      select.appendChild(el("option", {value:"", text:"Select..."}));
+      options.forEach(opt => {
+        select.appendChild(el("option", {value: opt, text: opt}));
+      });
+      formArea.appendChild(el("div", {}, [label, select]));
+    }
+  }
+
+  function getSelections() {
+    return Object.keys(DATA.lovs).map(lov => {
+      const id = "f_" + lov.replace(/\W+/g, "_");
+      return { parameter: lov, value: document.getElementById(id).value };
+    });
+  }
+
+  function preview() {
+    const tbody = document.querySelector("#selTable tbody");
+    tbody.innerHTML = "";
+
+    const selected = getSelections().filter(x => x.value);
+    selected.forEach(row => {
+      const tr = document.createElement("tr");
+      tr.appendChild(el("td", {text: row.parameter}));
+      tr.appendChild(el("td", {text: row.value}));
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById("previewStatus").textContent =
+      selected.length
+        ? `Preview updated (${selected.length} selections).`
+        : "No selections yet.";
+  }
+
+  function clearAll() {
+    Object.keys(DATA.lovs).forEach(lov => {
+      const id = "f_" + lov.replace(/\W+/g, "_");
+      document.getElementById(id).value = "";
+    });
+    preview();
+  }
+
+  function exportExcel() {
+    const rows = getSelections().filter(x => x.value);
+    if (!rows.length) {
+      alert("Nothing to export.");
+      return;
+    }
+
+    const ws = XLSX.utils.json_to_sheet(
+      rows.map(r => ({ Parameter: r.parameter, Value: r.value }))
+    );
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Configuration");
+
+    XLSX.writeFile(wb, "Configuration_Output.xlsx");
+  }
+
+  buildForm();
+  preview();
+</script>
+</body>
+</html>
