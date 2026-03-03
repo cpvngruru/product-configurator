@@ -26,13 +26,13 @@
     th, td { border: 1px solid #d8dee4; padding: 8px; }
     th { background: #f6f8fa; text-align: left; }
     .hint { color:#666; font-size: 12px; margin-top: 8px; }
-    .pill { display:inline-block; padding: 3px 8px; border-radius: 999px; background:#eef2ff; color:#1f2a7a; font-size: 12px; }
   </style>
 </head>
+
 <body>
 <div class="wrap">
   <h1>Build your product</h1>
-  <p class="sub">LOV-driven configurator with preview and Excel export.</p>
+  <p class="sub">Lanner Europe B.V</p>
 
   <div class="card">
     <h2>Configure</h2>
@@ -45,7 +45,7 @@
     </div>
 
     <div class="hint">
-      Dropdowns are generated from the LOV definitions.
+      Select <b>Model</b> first. The other LOVs will update based on the model selection.
     </div>
   </div>
 
@@ -66,19 +66,63 @@
 </div>
 
 <script>
-  /* Embedded LOV data (from your spreadsheet) */
-  const DATA = {
-    "lovs": {
-      "Model": ["Mini-ITX", "Micro-ATX", "Rackmount"],
-      "CPU": ["i3", "i5", "i7"],
-      "RAM": ["8GB", "16GB", "32GB"],
-      "SSD": ["256GB", "512GB", "1TB"],
-      "Power supply": ["110-240V", "24VDC"],
-      "Operating Temperature range": ["0-50C", "-20-70C"],
-      "IP": ["IP40", "IP65"]
+  // ---------- CONFIG: model-driven LOVs ----------
+  // (I preserved your wording exactly, including duplicates in SSD lists.)
+  const MODEL_CONFIGS = {
+    "1531": {
+      "CPU": [
+        "IIoT-1531 with Intel Core i7-1185GRE"
+      ],
+      "RAM": ["8GB","2x8","16GB","2x16","32GB","2x32"],
+      "SSD": [
+        "128GB, SATA3, 3D TLC BiCS5, PE: 3K, Wide temp.",
+        "256GB, SATA3, 3D TLC BiCS5, PE: 3K, Wide temp.",
+        "256GB, SATA3, 3D TLC BiCS5, PE: 3K, Wide temp.",
+        "1TB, SATA3, 3D TLC BiCS5, PE: 3K, Wide temp.",
+        "2TB, SATA3, 3D TLC BiCS5, PE: 3K, Wide temp."
+      ],
+      "Removable SSD": [
+        "128GB, SATA3, 3D TLC BiCS5, PE: 3K, Wide temp.",
+        "256GB, SATA3, 3D TLC BiCS5, PE: 3K, Wide temp.",
+        "256GB, SATA3, 3D TLC BiCS5, PE: 3K, Wide temp.",
+        "1TB, SATA3, 3D TLC BiCS5, PE: 3K, Wide temp.",
+        "2TB, SATA3, 3D TLC BiCS5, PE: 3K, Wide temp."
+      ],
+      "PSU": ["AC Single PSU","24VDC"],
+      "PCI eCards": ["1 x PCIe x16","3 x PCIe x4 slots"],
+      "OS": ["Windows 11","Windows 10 Embedded","Windows Server 2022","Linux"]
+    },
+
+    "3340": {
+      "CPU": [
+        "LEC-3340E with Intel Xeon W-11865MLE",
+        "LEC-3340F with Intel® Xeon® W-11555MLE"
+      ],
+      "RAM": ["8GB","2x8","16GB","2x16","32GB","2x32"],
+      "SSD": [
+        "128GB, SATA3, 3D TLC BiCS5, PE: 3K, Wide temp.",
+        "256GB, SATA3, 3D TLC BiCS5, PE: 3K, Wide temp.",
+        "256GB, SATA3, 3D TLC BiCS5, PE: 3K, Wide temp.",
+        "1TB, SATA3, 3D TLC BiCS5, PE: 3K, Wide temp.",
+        "2TB, SATA3, 3D TLC BiCS5, PE: 3K, Wide temp."
+      ],
+      "Removable SSD": [
+        "128GB, SATA3, 3D TLC BiCS5, PE: 3K, Wide temp.",
+        "256GB, SATA3, 3D TLC BiCS5, PE: 3K, Wide temp.",
+        "256GB, SATA3, 3D TLC BiCS5, PE: 3K, Wide temp.",
+        "1TB, SATA3, 3D TLC BiCS5, PE: 3K, Wide temp.",
+        "2TB, SATA3, 3D TLC BiCS5, PE: 3K, Wide temp."
+      ],
+      "PSU": ["AC Single PSU","24VDC"],
+      "PCI eCards": ["1 x PCIe x16","3 x PCIe x4 slots"],
+      "OS": ["Windows 11","Windows 10 Embedded","Windows Server 2022","Linux"]
     }
   };
 
+  // Order of fields to show (after Model)
+  const FIELD_ORDER = ["Model","CPU","RAM","SSD","Removable SSD","PSU","PCI eCards","OS"];
+
+  // ---------- UI helpers ----------
   function el(tag, attrs={}, children=[]) {
     const n = document.createElement(tag);
     for (const [k,v] of Object.entries(attrs)) {
@@ -88,39 +132,106 @@
     for (const ch of children) n.appendChild(ch);
     return n;
   }
+  function idFor(param) { return "f_" + param.replace(/\W+/g, "_"); }
 
   function buildForm() {
     const formArea = document.getElementById("formArea");
     formArea.innerHTML = "";
 
-    for (const [lovName, options] of Object.entries(DATA.lovs)) {
-      const id = "f_" + lovName.replace(/\W+/g, "_");
-      const label = el("label", {for: id, text: lovName});
-      const select = el("select", {id, name: lovName});
-      select.appendChild(el("option", {value:"", text:"Select..."}));
-      options.forEach(opt => {
-        select.appendChild(el("option", {value: opt, text: opt}));
+    // Model select (always visible)
+    const modelWrap = document.createElement("div");
+    const modelId = idFor("Model");
+    const modelLabel = el("label", { for: modelId, text: "Model" });
+    const modelSelect = el("select", { id: modelId, name: "Model" });
+    modelSelect.appendChild(el("option", { value: "", text: "Select..." }));
+    Object.keys(MODEL_CONFIGS).forEach(m => {
+      modelSelect.appendChild(el("option", { value: m, text: m }));
+    });
+
+    modelSelect.addEventListener("change", () => {
+      // rebuild dependent LOVs
+      populateDependentLovs(modelSelect.value);
+      // (optional) refresh preview live
+      // preview();
+    });
+
+    modelWrap.appendChild(modelLabel);
+    modelWrap.appendChild(modelSelect);
+    formArea.appendChild(modelWrap);
+
+    // Create empty selects for the rest, will be populated after model selection
+    FIELD_ORDER.slice(1).forEach(param => {
+      const wrap = document.createElement("div");
+      const id = idFor(param);
+      const label = el("label", { for: id, text: param });
+      const select = el("select", { id, name: param, disabled: "disabled" });
+      select.appendChild(el("option", { value: "", text: "Select model first..." }));
+      select.addEventListener("change", () => {
+        // optional: preview();
       });
-      formArea.appendChild(el("div", {}, [label, select]));
-    }
+      wrap.appendChild(label);
+      wrap.appendChild(select);
+      formArea.appendChild(wrap);
+    });
   }
 
-  function getSelections() {
-    return Object.keys(DATA.lovs).map(lov => {
-      const id = "f_" + lov.replace(/\W+/g, "_");
-      return { parameter: lov, value: document.getElementById(id).value };
+  function setSelectOptions(selectEl, options, placeholderText="Select...") {
+    selectEl.innerHTML = "";
+    selectEl.appendChild(el("option", { value: "", text: placeholderText }));
+    options.forEach(opt => selectEl.appendChild(el("option", { value: opt, text: opt })));
+  }
+
+  function populateDependentLovs(model) {
+    // Clear and disable all if no model
+    if (!model || !MODEL_CONFIGS[model]) {
+      FIELD_ORDER.slice(1).forEach(param => {
+        const sel = document.getElementById(idFor(param));
+        sel.value = "";
+        sel.setAttribute("disabled","disabled");
+        setSelectOptions(sel, [], "Select model first...");
+      });
+      return;
+    }
+
+    // Enable and populate based on model config
+    const cfg = MODEL_CONFIGS[model];
+    FIELD_ORDER.slice(1).forEach(param => {
+      const sel = document.getElementById(idFor(param));
+      sel.removeAttribute("disabled");
+      const opts = cfg[param] || [];
+      setSelectOptions(sel, opts, "Select...");
+      sel.value = "";
     });
+  }
+
+  // ---------- Preview + Export ----------
+  function getSelections() {
+    const selections = [];
+
+    // Always include model
+    const modelVal = document.getElementById(idFor("Model")).value;
+    selections.push({ parameter: "Model", value: modelVal });
+
+    // Include other fields only if they have a value
+    FIELD_ORDER.slice(1).forEach(param => {
+      const sel = document.getElementById(idFor(param));
+      const val = sel ? sel.value : "";
+      selections.push({ parameter: param, value: val });
+    });
+
+    return selections;
   }
 
   function preview() {
     const tbody = document.querySelector("#selTable tbody");
     tbody.innerHTML = "";
 
-    const selected = getSelections().filter(x => x.value);
+    const selected = getSelections().filter(x => x.value && x.value.trim() !== "");
+
     selected.forEach(row => {
       const tr = document.createElement("tr");
-      tr.appendChild(el("td", {text: row.parameter}));
-      tr.appendChild(el("td", {text: row.value}));
+      tr.appendChild(el("td", { text: row.parameter }));
+      tr.appendChild(el("td", { text: row.value }));
       tbody.appendChild(tr);
     });
 
@@ -131,15 +242,16 @@
   }
 
   function clearAll() {
-    Object.keys(DATA.lovs).forEach(lov => {
-      const id = "f_" + lov.replace(/\W+/g, "_");
-      document.getElementById(id).value = "";
-    });
+    // reset model
+    const modelSel = document.getElementById(idFor("Model"));
+    modelSel.value = "";
+    // reset dependent fields
+    populateDependentLovs("");
     preview();
   }
 
   function exportExcel() {
-    const rows = getSelections().filter(x => x.value);
+    const rows = getSelections().filter(x => x.value && x.value.trim() !== "");
     if (!rows.length) {
       alert("Nothing to export.");
       return;
@@ -148,14 +260,14 @@
     const ws = XLSX.utils.json_to_sheet(
       rows.map(r => ({ Parameter: r.parameter, Value: r.value }))
     );
-
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Configuration");
-
     XLSX.writeFile(wb, "Configuration_Output.xlsx");
   }
 
+  // init
   buildForm();
+  populateDependentLovs(""); // start disabled until model is selected
   preview();
 </script>
 </body>
